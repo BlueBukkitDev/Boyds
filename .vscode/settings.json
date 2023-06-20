@@ -1,0 +1,7 @@
+{
+    "editor.inlineSuggest.enabled": false,
+    "audioCues.lineHasInlineSuggestion": "off",
+    "editor.suggest.showInlineDetails": false,
+    "editor.screenReaderAnnounceInlineSuggestion": false,
+    "editor.snippetSuggestions": "none"
+}
