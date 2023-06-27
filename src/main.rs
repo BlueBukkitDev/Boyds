@@ -3,7 +3,6 @@ use ggez::graphics::{self, Color, Canvas};
 use ggez::{Context, GameResult};
 use ggez::glam::*;
 use rand::{self, Rng};
-use cgmath::Point2;
 
 struct BoidMember {
     pos_x: f32,
@@ -26,11 +25,34 @@ impl BoidMember {
         self.pos_y = y;
     }
 
-    fn reflect(&mut self){
+    fn reflect(&mut self, wall:Wall) {
+        if wall == Wall::Top {
+            //we're -90 to +90 here
+        }
         self.dir += 180;
         if self.dir >= 360{
             self.dir -= 360;
         }
+    }
+}
+
+#[derive(PartialEq, Eq)]//this allows us to compare enums with ==
+enum Wall {
+    Top, Right, Bottom, Left
+}
+
+struct Point {
+    x:f32,
+    y:f32
+}
+
+impl Point {
+    fn new(x:f32, y:f32) -> Point {
+        let p = Point {
+            x: x,
+            y: y,
+        };
+        return p;
     }
 }
 
@@ -66,7 +88,7 @@ fn random_dir() -> u16 {
     rng.gen_range(0, 360)
 }
 
-fn move_member(member:&mut BoidMember) -> Point2<f32> {
+fn move_member(member:&mut BoidMember) -> Point {
     let mut _dir = member.dir as f32;
     let mut pos_x = member.pos_x;
 
@@ -78,40 +100,52 @@ fn move_member(member:&mut BoidMember) -> Point2<f32> {
         //y = 1-(dir/90)*step_normal   --  So if we are facing up, dir = 1. 1-(1/90) = 0.9888. Move up 0.9888. 
         pos_x += _dir/90.0;
         pos_y -= 1.0-(_dir/90.0);
-        if pos_x > 800.0 || pos_y < 0.0 {
+        if pos_x > 800.0 {
             pos_x -= _dir/90.0;
+            member.reflect(Wall::Right);
+        }
+        if pos_y < 0.0 {
             pos_y += 1.0-(_dir/90.0);
-            member.reflect();
+            member.reflect(Wall::Top);
         }
     }else if _dir/90.0 < 2.0 {
         _dir %= 90.0;
         pos_x += _dir/90.0;
         pos_y += 1.0-(_dir/90.0);
-        if pos_x > 800.0 || pos_y > 600.0 {
+        if pos_x > 800.0 {
             pos_x -= _dir/90.0;
+            member.reflect(Wall::Right);
+        }
+        if pos_y > 600.0 {
             pos_y -= 1.0-(_dir/90.0);
-            member.reflect();
+            member.reflect(Wall::Bottom);
         }
     }else if _dir/90.0 < 3.0 {
         _dir %= 90.0;
         pos_x -= _dir/90.0;
         pos_y += 1.0-(_dir/90.0);
-        if pos_x < 0.0 || pos_y > 600.0 {
+        if pos_x < 0.0 {
             pos_x += _dir/90.0;
+            member.reflect(Wall::Left);
+        }
+        if pos_y > 600.0 {
             pos_y -= 1.0-(_dir/90.0);
-            member.reflect();
+            member.reflect(Wall::Bottom);
         }
     }else if _dir/90.0 < 4.0 {
         _dir %= 90.0;
         pos_x -= _dir/90.0;
         pos_y -= 1.0-(_dir/90.0);
-        if pos_x < 0.0 || pos_y < 0.0 {
+        if pos_x < 0.0 {
             pos_x += _dir/90.0;
+            member.reflect(Wall::Left);
+        }
+        if pos_y < 0.0 {
             pos_y += 1.0-(_dir/90.0);
-            member.reflect();
+            member.reflect(Wall::Top);
         }
     }
-    return Point2::new(pos_x, pos_y);
+    return Point::new(pos_x, pos_y);
 }
 
 impl event::EventHandler<ggez::GameError> for MainState {
@@ -123,7 +157,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
         let mut i = 0;
         while i < self.boid.len() {
             let mut member = &mut self.boid[i];
-            let new_loc: Point2<f32> = move_member(&mut member);
+            let new_loc: Point = move_member(&mut member);
             self.boid[i].transform(new_loc.x, new_loc.y);
             i+=1;
         }
