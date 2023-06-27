@@ -3,15 +3,16 @@ use ggez::graphics::{self, Color, Canvas};
 use ggez::{Context, GameResult};
 use ggez::glam::*;
 use rand::{self, Rng};
+use cgmath::Point2;
 
 struct BoidMember {
     pos_x: f32,
     pos_y: f32,
-    dir: Vec<f32>
+    dir: u16
 }
 
 impl BoidMember {
-    fn new(pos_x:f32, pos_y:f32, dir:Vec<f32>) -> BoidMember {
+    fn new(pos_x:f32, pos_y:f32, dir:u16) -> BoidMember {
         let m: BoidMember = BoidMember{
             pos_x : pos_x,
             pos_y : pos_y, 
@@ -19,16 +20,27 @@ impl BoidMember {
         };
         return m;
     }
+
+    fn transform(&mut self, x:f32, y:f32) {
+        self.pos_x = x;
+        self.pos_y = y;
+    }
+
+    fn reflect(&mut self){
+        self.dir += 180;
+        if self.dir >= 360{
+            self.dir -= 360;
+        }
+    }
 }
 
 struct MainState {
-    boid:Vec<BoidMember>,
-    timer:i32
+    boid:Vec<BoidMember>
 }
 
 impl MainState {
     fn new() -> GameResult<MainState> {
-        let s: MainState = MainState{boid:Vec::new(), timer:0}; //{ pos_x: 0.0};
+        let s: MainState = MainState{boid:Vec::new()}; //{ pos_x: 0.0};
         Ok(s)
     }
 
@@ -43,14 +55,79 @@ fn get_random_float(range:i32) -> f32 {
     rng.gen_range(0, range) as f32
 }
 
+//fn get_random_int(range:u16) -> u16 {
+//    let mut rng = rand::thread_rng();
+//
+//    rng.gen_range(0, range)
+//}
+
+fn random_dir() -> u16 {
+    let mut rng = rand::thread_rng();
+    rng.gen_range(0, 360)
+}
+
+fn move_member(member:&mut BoidMember) -> Point2<f32> {
+    let mut _dir = member.dir as f32;
+    let mut pos_x = member.pos_x;
+
+    let mut pos_y = member.pos_y;
+    if _dir/90.0 < 1.0 {
+        //x = dir/90*step_normal   --  so if we are facing right, dir = 89. 89/90 = 0.9888 = 0.9888. Move right 0.9888. 
+        //y = 1-(dir/90)*step_normal   --  so if we are facing right, dir = 89. 1-(89/90) = 0.0111. Move up 0.0111.
+        //x = dir/90*step_normal   --  So if we are facing up, dir = 1. 1/90 = 0.0111 = 0.0111. Move right 0.0111.
+        //y = 1-(dir/90)*step_normal   --  So if we are facing up, dir = 1. 1-(1/90) = 0.9888. Move up 0.9888. 
+        pos_x += _dir/90.0;
+        pos_y -= 1.0-(_dir/90.0);
+        if pos_x > 800.0 || pos_y < 0.0 {
+            pos_x -= _dir/90.0;
+            pos_y += 1.0-(_dir/90.0);
+            member.reflect();
+        }
+    }else if _dir/90.0 < 2.0 {
+        _dir %= 90.0;
+        pos_x += _dir/90.0;
+        pos_y += 1.0-(_dir/90.0);
+        if pos_x > 800.0 || pos_y > 600.0 {
+            pos_x -= _dir/90.0;
+            pos_y -= 1.0-(_dir/90.0);
+            member.reflect();
+        }
+    }else if _dir/90.0 < 3.0 {
+        _dir %= 90.0;
+        pos_x -= _dir/90.0;
+        pos_y += 1.0-(_dir/90.0);
+        if pos_x < 0.0 || pos_y > 600.0 {
+            pos_x += _dir/90.0;
+            pos_y -= 1.0-(_dir/90.0);
+            member.reflect();
+        }
+    }else if _dir/90.0 < 4.0 {
+        _dir %= 90.0;
+        pos_x -= _dir/90.0;
+        pos_y -= 1.0-(_dir/90.0);
+        if pos_x < 0.0 || pos_y < 0.0 {
+            pos_x += _dir/90.0;
+            pos_y += 1.0-(_dir/90.0);
+            member.reflect();
+        }
+    }
+    return Point2::new(pos_x, pos_y);
+}
+
 impl event::EventHandler<ggez::GameError> for MainState {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
 
-        if self.timer % 60 == 0 && self.boid.len() < 200 {
-            MainState::add_boid_member(self, BoidMember::new(get_random_float(800), get_random_float(600), vec![10.0]));
-            println!("{} members", self.boid.len());
+        if self.boid.len() < 50 {
+            MainState::add_boid_member(self, BoidMember::new(get_random_float(800), get_random_float(600), random_dir()));
         }
-        self.timer += 1;
+        let mut i = 0;
+        while i < self.boid.len() {
+            let mut member = &mut self.boid[i];
+            let new_loc: Point2<f32> = move_member(&mut member);
+            self.boid[i].transform(new_loc.x, new_loc.y);
+            i+=1;
+        }
+
         Ok(())
     }
 
