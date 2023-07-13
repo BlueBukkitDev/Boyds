@@ -1,145 +1,19 @@
+mod entities;
+mod utils;
+
 use ggez::event;
 use ggez::graphics::{self, Color, Canvas};
 use ggez::{Context, GameResult};
 use ggez::glam::*;
 use rand::{self, Rng};
 use ggez::conf;
+use entities::{BoidMember, Variety};
+use utils::{Point, Wall, VarietyMatcher};
 
 static WIDTH: f32 = 1800.0;
 static HEIGHT: f32 = 900.0;
 static MEMBER_SIZE: f32 = 5.0;
-static MEMBER_SPEED: f32 = 1.3;
-
-#[derive(Copy, Clone)]
-struct BoidMember {
-    id: u8,
-    variety: Variety,
-    pos_x: f32,
-    pos_y: f32,
-    dir: f32,
-    size: f32
-}
-
-impl BoidMember {
-    fn new(id: u8, variety: Variety, pos_x: f32, pos_y: f32, dir: f32, size: f32) -> BoidMember {
-        let m: BoidMember = BoidMember{
-            id : id,
-            variety: variety,
-            pos_x : pos_x,
-            pos_y : pos_y, 
-            dir : dir,
-            size: size
-        };
-        return m;
-    }
-
-    fn get_location(&self) -> Point {
-        return Point::new(self.pos_x, self.pos_y);
-    }
-
-    /*fn equals(&self, member: &BoidMember) -> bool {
-        return self.id == member.id;
-    }*/
-
-    fn transform(&mut self, point: Point) {
-        self.pos_x = point.x;
-        self.pos_y = point.y;
-    }
-
-    fn reflect(&mut self, wall:Wall) {
-        if wall == Wall::Flat {
-            if self.dir < 180.0 {//moving up and right
-                self.dir = 180.0-self.dir;
-            }else if self.dir > 180.0 {//Moving up and left
-                self.dir = 540.0-self.dir;
-            }
-        }else if wall == Wall::Side {
-            self.dir = 360.0-self.dir;
-        }
-    }
-
-    fn conform(&mut self, dir: f32, strength: f32) -> bool {
-        if dir < self.dir {
-            if self.dir-dir < strength {
-                self.dir = dir;
-                return true;
-            }
-            self.dir -= strength;
-        }else {
-            if dir-self.dir < strength {
-                self.dir = dir;
-                return true;
-            }
-            self.dir += strength;
-        }
-        return false;
-    }
-
-    fn approach(&mut self, target: Point, strength: f32) {
-        self.conform(self.get_location().get_dir(target), strength);
-    }
-
-    fn repel(&mut self, deterrent: Point, strength: f32) {
-        let new_dir = deterrent.get_dir(self.get_location());
-        if self.dir > new_dir {
-            self.dir -= strength;
-        }else {
-            self.dir += strength;
-        }
-        self.dir = (self.dir+360.0)%360.0;
-    }
-}
-
-#[derive(PartialEq, Eq)]
-enum Wall {
-    Side, Flat
-}
-
-#[derive(PartialEq, Eq)]
-enum VarietyMatcher {
-    Introvert, Oblivious, Extrovert
-}
-
-#[derive(Copy, Clone, PartialEq)]
-struct Variety {
-    r:u8,
-    g:u8,
-    b:u8
-}
-
-impl Variety {
-    fn red() -> Variety {
-        Variety {
-            r: 180, 
-            g: 50, 
-            b: 30
-        }
-    }
-    fn green() -> Variety {
-        Variety {
-            r: 50, 
-            g: 180, 
-            b: 90
-        }
-    }
-    fn blue() -> Variety {
-        Variety {
-            r: 40, 
-            g: 90, 
-            b: 180
-        }
-    }
-    fn random() -> Variety {
-        let rand = rand::thread_rng().gen_range(0, 4);
-        if rand == 0 {
-            Self::red()
-        }else if rand == 1 {
-            Self::green()
-        }else {
-            Self::blue()
-        }
-    }
-}
+//static MEMBER_SPEED: f32 = 1.3;
 
 fn wrap(position: &mut Point, wall: Wall){
     if wall == Wall::Flat {
@@ -154,62 +28,6 @@ fn wrap(position: &mut Point, wall: Wall){
         }else {//right
             position.x = 0.0;
         }
-    }
-}
-
-struct Point {
-    x:f32,
-    y:f32
-}
-
-impl Point {
-    fn new(x:f32, y:f32) -> Point {
-        Point {
-            x: x,
-            y: y,
-        }
-    }
-
-    fn distance(&self, point: Point) -> f32 {
-        let a = self.x-point.x;
-        let b = self.y-point.y;
-        return ((a*a)+(b*b)).sqrt();
-    }
-
-    /**
-    * Returns a `Point` that is "dist" distance away from the "origin" `Point` in direction "dir". 
-    */
-    fn get_dir_increment(&self, dir: f32, dist: f32) -> Point {
-        let mut pos_x = self.x;
-        let mut pos_y = self.y;
-    
-        if dir < 90.0 {
-            pos_x += (dir/90.0)*dist;
-            pos_y -= ((90.0-dir)/90.0)*dist;
-        }else if dir < 180.0 {
-            pos_x += ((180.0-dir)/90.0)*dist;
-            pos_y += ((dir-90.0)/90.0)*dist;
-        }else if dir < 270.0 {
-            pos_x -= ((dir-180.0)/90.0)*dist;
-            pos_y += ((270.0-dir)/90.0)*dist;
-        }else if dir < 360.0 {
-            pos_x -= ((360.0-dir)/90.0)*dist;
-            pos_y -= ((dir-270.0)/90.0)*dist;
-        }
-        return Point::new(pos_x, pos_y);
-    }
-
-    fn get_dir(&self, target: Point) -> f32 {//cos(theta) = adj/hyp, so //acos(adj/hyp) = theta
-        if target.x >  self.x {//right
-            if target.y < self.y {//top
-                return f32::acos((self.y-target.y)/self.distance(target))//top right
-            }//bottom
-            return 90.0+f32::acos((target.x-self.x)/self.distance(target))//bottom right
-        }//left
-        if target.y > self.y {//bottom
-            return 180.0+f32::acos(target.y-self.y)/self.distance(target)//bottom left
-        }//top
-        return 270.0+f32::acos((self.x-target.x)/self.distance(target))//top left
     }
 }
 
@@ -315,8 +133,8 @@ fn average_locations(members: Vec<BoidMember>) -> Point {
     let mut pos_y: f32 = 0.0;
     let length: f32 = members.len() as f32;
     for member in members {
-        pos_x += member.pos_x;
-        pos_y += member.pos_y;
+        pos_x += member.get_location().x;
+        pos_y += member.get_location().y;
     }
     Point::new(pos_x/length, pos_y/length)
 }
@@ -345,15 +163,15 @@ fn get_nearby_members(variety: Variety, location: Point, boid: &Vec<BoidMember>,
 }
 
 fn apply_attraction(member: &mut BoidMember, members: &Vec<BoidMember>) {
-    member.approach(average_locations(get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Introvert, 200.0)), 0.2);
+    member.approach(average_locations(get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Introvert, 200.0)), 1.0);
 }
 
 fn apply_cohesion(member: &mut BoidMember, members: &Vec<BoidMember>) {
-    member.conform(average_directions(get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Introvert, 100.0)), 0.2);
+    member.conform(average_directions(get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Introvert, 100.0)), 1.0);
 }
 
 fn apply_repulsion(member: &mut BoidMember, members: &Vec<BoidMember>) {
-    member.repel(average_locations(get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Extrovert, 50.0)), 0.4);
+    member.repel(average_locations(get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Extrovert, 50.0)), 1.0);
 }
 
 impl event::EventHandler<ggez::GameError> for MainState {
@@ -367,7 +185,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
             let boid = &mut self.boid;
             let members = boid.clone();
             let member: &mut BoidMember = boid.get_mut(i).unwrap();
-            let new_loc: Point = get_next_pos(&mut member.get_location(), member.dir, 1.0 - (get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Extrovert, 50.0).len() as f32 / 100.0));
+            let new_loc: Point = get_next_pos(&mut member.get_location(), member.dir, 2.0 - (get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Extrovert, 50.0).len() as f32 / 100.0));
             member.transform(new_loc);
 
             apply_attraction(member, &members);
