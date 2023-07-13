@@ -8,6 +8,7 @@ use ggez::conf;
 static WIDTH: f32 = 1800.0;
 static HEIGHT: f32 = 900.0;
 static MEMBER_SIZE: f32 = 5.0;
+static MEMBER_SPEED: f32 = 1.3;
 
 #[derive(Copy, Clone)]
 struct BoidMember {
@@ -15,17 +16,19 @@ struct BoidMember {
     variety: Variety,
     pos_x: f32,
     pos_y: f32,
-    dir: f32
+    dir: f32,
+    size: f32
 }
 
 impl BoidMember {
-    fn new(id: u8, variety: Variety, pos_x: f32, pos_y: f32, dir: f32) -> BoidMember {
+    fn new(id: u8, variety: Variety, pos_x: f32, pos_y: f32, dir: f32, size: f32) -> BoidMember {
         let m: BoidMember = BoidMember{
             id : id,
             variety: variety,
             pos_x : pos_x,
             pos_y : pos_y, 
-            dir : dir
+            dir : dir,
+            size: size
         };
         return m;
     }
@@ -34,9 +37,9 @@ impl BoidMember {
         return Point::new(self.pos_x, self.pos_y);
     }
 
-    fn equals(&self, member: &BoidMember) -> bool {
+    /*fn equals(&self, member: &BoidMember) -> bool {
         return self.id == member.id;
-    }
+    }*/
 
     fn transform(&mut self, point: Point) {
         self.pos_x = point.x;
@@ -55,7 +58,7 @@ impl BoidMember {
         }
     }
 
-    fn steer(&mut self, dir: f32, strength: f32) -> bool {
+    fn conform(&mut self, dir: f32, strength: f32) -> bool {
         if dir < self.dir {
             if self.dir-dir < strength {
                 self.dir = dir;
@@ -71,11 +74,30 @@ impl BoidMember {
         }
         return false;
     }
+
+    fn approach(&mut self, target: Point, strength: f32) {
+        self.conform(self.get_location().get_dir(target), strength);
+    }
+
+    fn repel(&mut self, deterrent: Point, strength: f32) {
+        let new_dir = deterrent.get_dir(self.get_location());
+        if self.dir > new_dir {
+            self.dir -= strength;
+        }else {
+            self.dir += strength;
+        }
+        self.dir = (self.dir+360.0)%360.0;
+    }
 }
 
-#[derive(PartialEq, Eq)]//this allows us to compare enums with ==
+#[derive(PartialEq, Eq)]
 enum Wall {
     Side, Flat
+}
+
+#[derive(PartialEq, Eq)]
+enum VarietyMatcher {
+    Introvert, Oblivious, Extrovert
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -153,6 +175,42 @@ impl Point {
         let b = self.y-point.y;
         return ((a*a)+(b*b)).sqrt();
     }
+
+    /**
+    * Returns a `Point` that is "dist" distance away from the "origin" `Point` in direction "dir". 
+    */
+    fn get_dir_increment(&self, dir: f32, dist: f32) -> Point {
+        let mut pos_x = self.x;
+        let mut pos_y = self.y;
+    
+        if dir < 90.0 {
+            pos_x += (dir/90.0)*dist;
+            pos_y -= ((90.0-dir)/90.0)*dist;
+        }else if dir < 180.0 {
+            pos_x += ((180.0-dir)/90.0)*dist;
+            pos_y += ((dir-90.0)/90.0)*dist;
+        }else if dir < 270.0 {
+            pos_x -= ((dir-180.0)/90.0)*dist;
+            pos_y += ((270.0-dir)/90.0)*dist;
+        }else if dir < 360.0 {
+            pos_x -= ((360.0-dir)/90.0)*dist;
+            pos_y -= ((dir-270.0)/90.0)*dist;
+        }
+        return Point::new(pos_x, pos_y);
+    }
+
+    fn get_dir(&self, target: Point) -> f32 {//cos(theta) = adj/hyp, so //acos(adj/hyp) = theta
+        if target.x >  self.x {//right
+            if target.y < self.y {//top
+                return f32::acos((self.y-target.y)/self.distance(target))//top right
+            }//bottom
+            return 90.0+f32::acos((target.x-self.x)/self.distance(target))//bottom right
+        }//left
+        if target.y > self.y {//bottom
+            return 180.0+f32::acos(target.y-self.y)/self.distance(target)//bottom left
+        }//top
+        return 270.0+f32::acos((self.x-target.x)/self.distance(target))//top left
+    }
 }
 
 struct MainState {
@@ -196,10 +254,6 @@ fn get_next_pos(position: &mut Point, direction: f32, speed: f32) -> Point {
 
     let mut pos_y = position.y;
     if dir < 90.0 {
-        //x = dir/90*step_normal   --  so if we are facing right, dir = 89. 89/90 = 0.9888 = 0.9888. Move right 0.9888. 
-        //y = 1-(dir/90)*step_normal   --  so if we are facing right, dir = 89. 1-(89/90) = 0.0111. Move up 0.0111.
-        //x = dir/90*step_normal   --  So if we are facing up, dir = 1. 1/90 = 0.0111 = 0.0111. Move right 0.0111.
-        //y = 1-(dir/90)*step_normal   --  So if we are facing up, dir = 1. 1-(1/90) = 0.9888. Move up 0.9888. 
         if pos_x > WIDTH {
             wrap(position, Wall::Side);
             pos_x = position.x;
@@ -244,7 +298,7 @@ fn get_next_pos(position: &mut Point, direction: f32, speed: f32) -> Point {
         pos_x -= ((360.0-dir)/90.0)*speed;
         pos_y -= ((dir-270.0)/90.0)*speed;
     }
-    return Point::new(pos_x, pos_y);
+    Point::new(pos_x, pos_y)
 }
 
 fn average_directions(members: Vec<BoidMember>) -> f32 {
@@ -253,17 +307,36 @@ fn average_directions(members: Vec<BoidMember>) -> f32 {
     for member in members {
         dir += member.dir;
     }
-    return dir/length;
+    dir/length
 }
 
-fn get_nearby_members(variety: Variety, location: Point, boid: &Vec<BoidMember>) -> Vec<BoidMember> {
+fn average_locations(members: Vec<BoidMember>) -> Point {
+    let mut pos_x: f32 = 0.0;
+    let mut pos_y: f32 = 0.0;
+    let length: f32 = members.len() as f32;
+    for member in members {
+        pos_x += member.pos_x;
+        pos_y += member.pos_y;
+    }
+    Point::new(pos_x/length, pos_y/length)
+}
+
+fn get_nearby_members(variety: Variety, location: Point, boid: &Vec<BoidMember>, matcher: VarietyMatcher, dist: f32) -> Vec<BoidMember> {
     let mut nearby: Vec<BoidMember> = Vec::new();
     let mut count = 0;
     while count < boid.len() {
         let each: &BoidMember = &boid[count];
-        if location.distance(each.get_location()) < 100.0 {
-            if each.variety == variety {
-                nearby.insert(0, BoidMember::new(each.id, each.variety, each.pos_x, each.pos_y, each.dir));
+        if location.distance(each.get_location()) <= dist {
+            if matcher == VarietyMatcher::Introvert {
+                if each.variety == variety {
+                    nearby.insert(0, BoidMember::new(each.id, each.variety, each.pos_x, each.pos_y, each.dir, each.size));
+                }
+            }else if matcher == VarietyMatcher::Extrovert {
+                if each.variety != variety {
+                    nearby.insert(0, BoidMember::new(each.id, each.variety, each.pos_x, each.pos_y, each.dir, each.size));
+                }
+            }else if matcher == VarietyMatcher::Oblivious {
+                nearby.insert(0, BoidMember::new(each.id, each.variety, each.pos_x, each.pos_y, each.dir, each.size));
             }
         }
         count += 1;
@@ -271,46 +344,33 @@ fn get_nearby_members(variety: Variety, location: Point, boid: &Vec<BoidMember>)
     nearby
 }
 
-fn get_crowded_members(variety: Variety, location: Point, boid: &Vec<BoidMember>) -> Vec<BoidMember>{
-    let mut nearby: Vec<BoidMember> = Vec::new();
-    let mut count = 0;
-    while count < boid.len() {
-        let each: &BoidMember = &boid[count];
-        if location.distance(each.get_location()) < 10.0 {
-                nearby.insert(0, BoidMember::new(each.id, each.variety, each.pos_x, each.pos_y, each.dir));
-        }
-        count += 1;
-    }
-    nearby
+fn apply_attraction(member: &mut BoidMember, members: &Vec<BoidMember>) {
+    member.approach(average_locations(get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Introvert, 200.0)), 0.2);
 }
 
 fn apply_cohesion(member: &mut BoidMember, members: &Vec<BoidMember>) {
-    member.steer(average_directions(get_nearby_members(member.variety, member.get_location(), &members)), 0.2);
+    member.conform(average_directions(get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Introvert, 100.0)), 0.2);
 }
 
 fn apply_repulsion(member: &mut BoidMember, members: &Vec<BoidMember>) {
-    for nearby in members {
-        if nearby.equals(member) {
-            continue;
-        }
-        //do repulsion here
-    }
+    member.repel(average_locations(get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Extrovert, 50.0)), 0.4);
 }
 
 impl event::EventHandler<ggez::GameError> for MainState {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
         if self.boid.len() < 100 {
             let count = self.boid.len() as u8;
-            MainState::add_boid_member(self, BoidMember::new(count+1, Variety::random(), get_random_float(WIDTH), get_random_float(HEIGHT), random_dir()));
+            MainState::add_boid_member(self, BoidMember::new(count+1, Variety::random(), get_random_float(WIDTH), get_random_float(HEIGHT), random_dir(), MEMBER_SIZE+get_random_float(2.0)));
         }
         let mut i = 0;
         while i < self.boid.len() {
             let boid = &mut self.boid;
             let members = boid.clone();
-            let mut member: &mut BoidMember = boid.get_mut(i).unwrap();
-            let new_loc: Point = get_next_pos(&mut member.get_location(), member.dir, 1.0);
+            let member: &mut BoidMember = boid.get_mut(i).unwrap();
+            let new_loc: Point = get_next_pos(&mut member.get_location(), member.dir, 1.0 - (get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Extrovert, 50.0).len() as f32 / 100.0));
             member.transform(new_loc);
 
+            apply_attraction(member, &members);
             apply_cohesion(member, &members);
             apply_repulsion(member, &members);
             
@@ -330,16 +390,16 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 ctx,
                 graphics::DrawMode::fill(),
                 Vec2::new(_member.pos_x, _member.pos_y),
-                MEMBER_SIZE,
+                _member.size,
                 0.1,
                 Color::from_rgb(_member.variety.r, _member.variety.g, _member.variety.b),
             )?;
-            let loc: Point = get_next_pos(&mut _member.get_location(), _member.dir, 7.0);
+            let loc: Point = _member.get_location().get_dir_increment(_member.dir, 7.0);
             let head = graphics::Mesh::new_circle(
                 ctx,
                 graphics::DrawMode::fill(),
                 Vec2::new(loc.x, loc.y),
-                MEMBER_SIZE/1.7,
+                _member.size/1.7,
                 0.1,
                 Color::from_rgb(_member.variety.r, _member.variety.g, _member.variety.b),
             )?;
