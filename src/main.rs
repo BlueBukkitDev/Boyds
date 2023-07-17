@@ -7,8 +7,8 @@ use ggez::{Context, GameResult};
 use ggez::glam::*;
 use rand::{self, Rng};
 use ggez::conf;
-use entities::{BoidMember, Variety};
-use utils::{Point, Wall, VarietyMatcher};
+use entities::{BoidMember, Variety, average_directions};
+use utils::{Point, Wall, VarietyMatcher, Direction};
 
 static WIDTH: f32 = 1800.0;
 static HEIGHT: f32 = 900.0;
@@ -50,17 +50,6 @@ fn get_random_float(range:f32) -> f32 {
     let mut rng = rand::thread_rng();
 
     rng.gen_range(0.0, range) as f32
-}
-
-//fn get_random_int(range:u16) -> u16 {
-//    let mut rng = rand::thread_rng();
-//
-//    rng.gen_range(0, range)
-//}
-
-fn random_dir() -> f32 {
-    let mut rng = rand::thread_rng();
-    rng.gen_range(0, 360) as f32
 }
 
 /**
@@ -119,15 +108,6 @@ fn get_next_pos(position: &mut Point, direction: f32, speed: f32) -> Point {
     Point::new(pos_x, pos_y)
 }
 
-fn average_directions(members: Vec<BoidMember>) -> f32 {
-    let mut dir: f32 = 0.0;
-    let length: f32 = members.len() as f32;
-    for member in members {
-        dir += member.dir;
-    }
-    dir/length
-}
-
 fn average_locations(members: Vec<BoidMember>) -> Point {
     let mut pos_x: f32 = 0.0;
     let mut pos_y: f32 = 0.0;
@@ -174,23 +154,31 @@ fn apply_repulsion(member: &mut BoidMember, members: &Vec<BoidMember>) {
     member.repel(average_locations(get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Extrovert, 50.0)), 1.0);
 }
 
+fn apply_collision(member: &mut BoidMember, members: &Vec<BoidMember>) {
+    let near: Vec<BoidMember> = get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Oblivious, 5.0);
+    if near.len() > 0 {
+        member.collide(&mut get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Oblivious, 5.0)[0]);
+    }
+}
+
 impl event::EventHandler<ggez::GameError> for MainState {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
         if self.boid.len() < 100 {
             let count = self.boid.len() as u8;
-            MainState::add_boid_member(self, BoidMember::new(count+1, Variety::random(), get_random_float(WIDTH), get_random_float(HEIGHT), random_dir(), MEMBER_SIZE+get_random_float(2.0)));
+            MainState::add_boid_member(self, BoidMember::new(count+1, Variety::random(), get_random_float(WIDTH), get_random_float(HEIGHT), Direction::new_random(), MEMBER_SIZE+get_random_float(2.0)));
         }
         let mut i = 0;
         while i < self.boid.len() {
             let boid = &mut self.boid;
             let members = boid.clone();
             let member: &mut BoidMember = boid.get_mut(i).unwrap();
-            let new_loc: Point = get_next_pos(&mut member.get_location(), member.dir, 2.0 - (get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Extrovert, 50.0).len() as f32 / 100.0));
+            let new_loc: Point = get_next_pos(&mut member.get_location(), member.dir.angle, 2.0 - (get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Extrovert, 50.0).len() as f32 / 100.0));
             member.transform(new_loc);
 
             apply_attraction(member, &members);
             apply_cohesion(member, &members);
             apply_repulsion(member, &members);
+            apply_collision(member, &members);
             
             i+=1;
         }
@@ -212,7 +200,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 0.1,
                 Color::from_rgb(_member.variety.r, _member.variety.g, _member.variety.b),
             )?;
-            let loc: Point = _member.get_location().get_dir_increment(_member.dir, 7.0);
+            let loc: Point = _member.get_location().extend_forward(_member.dir, _member.size+2.0);
             let head = graphics::Mesh::new_circle(
                 ctx,
                 graphics::DrawMode::fill(),

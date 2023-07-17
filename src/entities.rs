@@ -1,4 +1,4 @@
-use crate::utils::Point;
+use crate::utils::{Point, Direction};
 use rand::Rng;
 
 #[derive(Copy, Clone)]
@@ -7,12 +7,12 @@ pub struct BoidMember {
     pub variety: Variety,
     pub pos_x: f32,
     pub pos_y: f32,
-    pub dir: f32,
+    pub dir: Direction,
     pub size: f32
 }
 
 impl BoidMember {
-    pub fn new(id: u8, variety: Variety, pos_x: f32, pos_y: f32, dir: f32, size: f32) -> BoidMember {
+    pub fn new(id: u8, variety: Variety, pos_x: f32, pos_y: f32, dir: Direction, size: f32) -> BoidMember {
         let m: BoidMember = BoidMember{
             id : id,
             variety: variety,
@@ -50,18 +50,18 @@ impl BoidMember {
     }*/
 
     pub fn conform(&mut self, dir: f32, strength: f32) -> bool {
-        if dir < self.dir {
-            if self.dir-dir < strength {
-                self.dir = dir;
+        if dir < self.dir.angle {
+            if self.dir.angle-dir < strength {
+                self.dir.angle = dir;
                 return true;
             }
-            self.dir -= strength;
+            self.dir.angle -= strength;
         }else {
-            if dir-self.dir < strength {
-                self.dir = dir;
+            if dir-self.dir.angle < strength {
+                self.dir.angle = dir;
                 return true;
             }
-            self.dir += strength;
+            self.dir.angle += strength;
         }
         return false;
     }
@@ -70,15 +70,48 @@ impl BoidMember {
         self.conform(self.get_location().get_dir(target), strength);
     }
 
-    pub fn repel(&mut self, deterrent: Point, strength: f32) {
+    pub fn repel(&mut self, deterrent: Point, strength: f32) {//////////////////There will be a rollover issue here
         let new_dir = deterrent.get_dir(self.get_location());
-        if self.dir > new_dir {
-            self.dir += strength;
+        if self.dir.angle > new_dir {
+            self.dir.angle += strength;
         }else {
-            self.dir -= strength;
+            self.dir.angle -= strength;
         }
-        self.dir = (self.dir+360.0)%360.0;
+        self.dir.angle = (self.dir.angle+360.0)%360.0;
     }
+
+    pub fn collide(&mut self, obstacle: &mut BoidMember) {
+        let diff = Direction::difference(self.dir, obstacle.dir);
+        //println!("[dirs] 1:{}, 2:{}", dir1.angle, dir2.angle);
+        if self.dir.is_cw_of(obstacle.dir) {
+            self.dir.add(diff/2.0);
+            obstacle.dir.subtract(diff/2.0);
+        }else{
+            self.dir.subtract(diff/2.0);
+            obstacle.dir.add(diff/2.0);
+        }
+    }
+}
+
+pub fn average_directions(members: Vec<BoidMember>) -> f32 {
+    let length: f32 = members.len() as f32;
+    if length <= 0.0 {
+        return 0.0;
+    }
+    let mut dir: f32 = members[0].dir.angle/length;
+    let mut count = 1;
+    while count < members.len() {//Need to use iterative averaging instead of batch averaging. 
+        if (dir - members[count].dir.angle).abs() > 180.0 {
+            dir += members[count].dir.angle/length;
+            dir += 180.0;//invert
+            dir = (360.0+dir)%360.0;
+        }else{
+            dir += members[count].dir.angle/length;
+            dir = (360.0+dir)%360.0;
+        }
+        count += 1;
+    }
+    dir
 }
 
 
