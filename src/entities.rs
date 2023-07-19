@@ -1,4 +1,4 @@
-use crate::utils::{Point, Direction};
+use geometry_2d::geometry::{Direction, Position};
 use rand::Rng;
 
 #[derive(Copy, Clone)]
@@ -24,15 +24,15 @@ impl BoidMember {
         return m;
     }
 
-    pub fn get_location(&self) -> Point {
-        return Point::new(self.pos_x, self.pos_y);
+    pub fn get_location(&self) -> Position {
+        return Position::new(self.pos_x, self.pos_y);
     }
 
     /*fn equals(&self, member: &BoidMember) -> bool {
         return self.id == member.id;
     }*/
 
-    pub fn transform(&mut self, point: Point) {
+    pub fn transform(&mut self, point: Position) {
         self.pos_x = point.x;
         self.pos_y = point.y;
     }
@@ -66,11 +66,11 @@ impl BoidMember {
         return false;
     }
 
-    pub fn approach(&mut self, target: Point, strength: f32) {
+    pub fn approach(&mut self, target: Position, strength: f32) {
         self.conform(self.get_location().get_dir(target), strength);
     }
 
-    pub fn repel(&mut self, deterrent: Point, strength: f32) {//////////////////There will be a rollover issue here
+    pub fn repel(&mut self, deterrent: Position, strength: f32) {//////////////////There will be a rollover issue here
         let new_dir = deterrent.get_dir(self.get_location());
         if self.dir.angle > new_dir {
             self.dir.angle += strength;
@@ -114,6 +114,10 @@ pub fn average_directions(members: Vec<BoidMember>) -> f32 {
     dir
 }
 
+#[derive(PartialEq, Eq)]
+pub enum VarietyMatcher {
+    Introvert, Oblivious, Extrovert
+}
 
 #[derive(Copy, Clone, PartialEq)]
 pub struct Variety {

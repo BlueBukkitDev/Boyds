@@ -1,5 +1,4 @@
 mod entities;
-mod utils;
 
 use ggez::event;
 use ggez::graphics::{self, Color, Canvas};
@@ -7,22 +6,22 @@ use ggez::{Context, GameResult};
 use ggez::glam::*;
 use rand::{self, Rng};
 use ggez::conf;
-use entities::{BoidMember, Variety, average_directions};
-use utils::{Point, Wall, VarietyMatcher, Direction};
+use entities::{BoidMember, Variety, VarietyMatcher, average_directions};
+use geometry_2d::geometry::{Direction, Position, Axis};
 
 static WIDTH: f32 = 1800.0;
 static HEIGHT: f32 = 900.0;
 static MEMBER_SIZE: f32 = 5.0;
 //static MEMBER_SPEED: f32 = 1.3;
 
-fn wrap(position: &mut Point, wall: Wall){
-    if wall == Wall::Flat {
+fn wrap(position: &mut Position, axis: Axis){
+    if axis == Axis::Vertical {
         if position.y < 2.0 {//top
             position.y = HEIGHT;
         }else {//bottom
             position.y = 0.0;
         }
-    }else if wall == Wall::Side {
+    }else if axis == Axis::Horizontal {
         if position.x < 2.0 {//left
             position.x = WIDTH;
         }else {//right
@@ -55,60 +54,60 @@ fn get_random_float(range:f32) -> f32 {
 /**
  * Speed should be 1 for the default step distance. 
  */
-fn get_next_pos(position: &mut Point, direction: f32, speed: f32) -> Point {
+fn get_next_pos(position: &mut Position, direction: f32, speed: f32) -> Position {
     let dir = direction;
     let mut pos_x = position.x;
 
     let mut pos_y = position.y;
     if dir < 90.0 {
         if pos_x > WIDTH {
-            wrap(position, Wall::Side);
+            wrap(position, Axis::Horizontal);
             pos_x = position.x;
         }
         if pos_y < 0.0 {
-            wrap(position, Wall::Flat);
+            wrap(position, Axis::Vertical);
             pos_y = position.y;
         }
         pos_x += (dir/90.0)*speed;
         pos_y -= ((90.0-dir)/90.0)*speed;
     }else if dir < 180.0 {
         if pos_x > WIDTH {
-            wrap(position, Wall::Side);
+            wrap(position, Axis::Horizontal);
             pos_x = position.x;
         }
         if pos_y > HEIGHT {
-            wrap(position, Wall::Flat);
+            wrap(position, Axis::Vertical);
             pos_y = position.y;
         }
         pos_x += ((180.0-dir)/90.0)*speed;
         pos_y += ((dir-90.0)/90.0)*speed;
     }else if dir < 270.0 {
         if pos_x < 0.0 {
-            wrap(position, Wall::Side);
+            wrap(position, Axis::Horizontal);
             pos_x = position.x;
         }
         if pos_y > HEIGHT {
-            wrap(position, Wall::Flat);
+            wrap(position, Axis::Vertical);
             pos_y = position.y;
         }
         pos_x -= ((dir-180.0)/90.0)*speed;
         pos_y += ((270.0-dir)/90.0)*speed;
     }else if dir < 360.0 {
         if pos_x < 0.0 {
-            wrap(position, Wall::Side);
+            wrap(position, Axis::Horizontal);
             pos_x = position.x;
         }
         if pos_y < 0.0 {
-            wrap(position, Wall::Flat);
+            wrap(position, Axis::Vertical);
             pos_y = position.y;
         }
         pos_x -= ((360.0-dir)/90.0)*speed;
         pos_y -= ((dir-270.0)/90.0)*speed;
     }
-    Point::new(pos_x, pos_y)
+    Position::new(pos_x, pos_y)
 }
 
-fn average_locations(members: Vec<BoidMember>) -> Point {
+fn average_locations(members: Vec<BoidMember>) -> Position {
     let mut pos_x: f32 = 0.0;
     let mut pos_y: f32 = 0.0;
     let length: f32 = members.len() as f32;
@@ -116,10 +115,10 @@ fn average_locations(members: Vec<BoidMember>) -> Point {
         pos_x += member.get_location().x;
         pos_y += member.get_location().y;
     }
-    Point::new(pos_x/length, pos_y/length)
+    Position::new(pos_x/length, pos_y/length)
 }
 
-fn get_nearby_members(variety: Variety, location: Point, boid: &Vec<BoidMember>, matcher: VarietyMatcher, dist: f32) -> Vec<BoidMember> {
+fn get_nearby_members(variety: Variety, location: Position, boid: &Vec<BoidMember>, matcher: VarietyMatcher, dist: f32) -> Vec<BoidMember> {
     let mut nearby: Vec<BoidMember> = Vec::new();
     let mut count = 0;
     while count < boid.len() {
@@ -172,7 +171,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
             let boid = &mut self.boid;
             let members = boid.clone();
             let member: &mut BoidMember = boid.get_mut(i).unwrap();
-            let new_loc: Point = get_next_pos(&mut member.get_location(), member.dir.angle, 2.0 - (get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Extrovert, 50.0).len() as f32 / 100.0));
+            let new_loc: Position = get_next_pos(&mut member.get_location(), member.dir.angle, 2.0 - (get_nearby_members(member.variety, member.get_location(), &members, VarietyMatcher::Extrovert, 50.0).len() as f32 / 100.0));
             member.transform(new_loc);
 
             apply_attraction(member, &members);
@@ -200,7 +199,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                 0.1,
                 Color::from_rgb(_member.variety.r, _member.variety.g, _member.variety.b),
             )?;
-            let loc: Point = _member.get_location().extend_forward(_member.dir, _member.size+2.0);
+            let loc: Position = _member.get_location().extend_forward(_member.dir, _member.size+2.0);
             let head = graphics::Mesh::new_circle(
                 ctx,
                 graphics::DrawMode::fill(),

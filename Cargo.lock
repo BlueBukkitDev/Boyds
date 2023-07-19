@@ -226,6 +226,7 @@ dependencies = [
 name = "boyds"
 version = "0.1.0"
 dependencies = [
+ "geometry_2d",
  "ggez",
  "rand 0.7.3",
 ]
@@ -761,6 +762,14 @@ name = "foreign-types-shared"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
+
+[[package]]
+name = "geometry_2d"
+version = "0.0.1"
+source = "git+https://github.com/BlueBukkitDev/geometry_2d?branch=master#3b5601df61284dd3ed82eec5b8b40e71f85bf8a5"
+dependencies = [
+ "rand 0.7.3",
+]
 
 [[package]]
 name = "getrandom"
